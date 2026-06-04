@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TruthLens — Multimodal Deepfake Detection</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050508;
+    --surface: #0d0d14;
+    --surface2: #12121e;
+    --cyan: #00e5cc;
+    --cyan-dim: #00e5cc33;
+    --cyan-glow: 0 0 20px #00e5cc66, 0 0 40px #00e5cc22;
+    --red: #ff3b3b;
+    --red-glow: 0 0 20px #ff3b3b66;
+    --green: #00e676;
+    --green-glow: 0 0 20px #00e67666;
+    --text: #e0e0e0;
+    --text-dim: #6b7280;
+    --border: #1a1a2e;
+    --mono: 'Share Tech Mono', monospace;
+    --head: 'Orbitron', monospace;
+    --body: 'Rajdhani', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--body); font-size: 16px; overflow-x: hidden; min-height: 100vh; }
+
+  /* INTRO */
+  #intro { position: fixed; inset: 0; z-index: 9999; background: #000; display: flex; align-items: center; justify-content: center; transition: opacity 0.8s ease; }
+  #intro.fade-out { opacity: 0; pointer-events: none; }
+  #intro-video { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
+  #skip-btn { position: absolute; top: 24px; right: 24px; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-family: var(--mono); font-size: 13px; padding: 8px 18px; border-radius: 4px; cursor: pointer; z-index: 10000; letter-spacing: 0.05em; transition: all 0.2s; }
+  #skip-btn:hover { background: rgba(0,229,204,0.15); border-color: var(--cyan); color: var(--cyan); }
+
+  /* GRID BG */
+  #app { position: relative; min-height: 100vh; }
+  #app::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(0,229,204,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,204,0.03) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; z-index: 0; }
+
+  /* NAVBAR */
+  nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; height: 60px; background: rgba(5,5,8,0.95); backdrop-filter: blur(10px); border-bottom: 1px solid var(--cyan); animation: navpulse 4s ease-in-out infinite; }
+  @keyframes navpulse { 0%,100% { box-shadow: 0 0 30px rgba(0,229,204,0.1); } 50% { box-shadow: 0 0 40px rgba(0,229,204,0.2); } }
+  .nav-logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 36px; height: 36px; border: 1.5px solid var(--cyan); border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: var(--cyan-glow); }
+  .logo-icon svg { width: 20px; height: 20px; stroke: var(--cyan); fill: none; }
+  .logo-text { font-family: var(--head); font-size: 18px; font-weight: 700; color: #fff; letter-spacing: 0.05em; }
+  .logo-text span { color: var(--cyan); }
+  .nav-tag { font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; }
+
+  /* HERO */
+  .hero { position: relative; z-index: 1; text-align: center; padding: 80px 20px 60px; }
+  .hero h1 { font-family: var(--head); font-size: clamp(36px, 6vw, 72px); font-weight: 900; color: #fff; letter-spacing: 0.02em; line-height: 1.1; }
+  .hero h1 span { color: var(--cyan); text-shadow: var(--cyan-glow); }
+  .hero p { margin-top: 16px; font-size: 20px; color: #fff; font-weight: 600; letter-spacing: 0.05em; }
+
+  /* GRID */
+  .grid { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+
+  /* CARD */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; position: relative; transition: border-color 0.3s, box-shadow 0.3s; }
+  .card:hover { border-color: var(--cyan-dim); box-shadow: 0 0 20px rgba(0,229,204,0.05); }
+  .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .card-title { display: flex; align-items: center; gap: 10px; font-family: var(--head); font-size: 14px; font-weight: 700; color: #fff; letter-spacing: 0.1em; text-transform: uppercase; }
+  .card-icon { width: 32px; height: 32px; background: var(--cyan-dim); border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+  .card-icon svg { width: 16px; height: 16px; stroke: var(--cyan); fill: none; }
+
+  /* DROP ZONE */
+  .drop-zone { border: 1.5px dashed rgba(0,229,204,0.3); border-radius: 8px; padding: 24px 20px; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; position: relative; }
+  .drop-zone:hover, .drop-zone.dragover { border-color: var(--cyan); background: rgba(0,229,204,0.03); }
+  .drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon { margin-bottom: 8px; }
+  .drop-icon svg { width: 24px; height: 24px; stroke: var(--cyan); fill: none; opacity: 0.7; }
+  .drop-text { font-size: 13px; color: var(--text-dim); }
+  .drop-text span { color: var(--cyan); }
+  .drop-formats { font-size: 10px; color: #3d4450; margin-top: 4px; font-family: var(--mono); letter-spacing: 0.05em; }
+
+  /* FILE LIST */
+  .file-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .file-item { display: flex; align-items: center; justify-content: space-between; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; }
+  .file-item-info { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text); font-family: var(--mono); min-width: 0; }
+  .file-item-info svg { width: 12px; height: 12px; stroke: var(--cyan); fill: none; flex-shrink: 0; }
+  .file-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+  .file-item-size { color: var(--text-dim); font-size: 10px; flex-shrink: 0; }
+  .file-remove { background: none; border: none; color: var(--red); cursor: pointer; font-size: 16px; padding: 0 4px; border-radius: 3px; transition: background 0.2s; flex-shrink: 0; }
+  .file-remove:hover { background: rgba(255,59,59,0.1); }
+
+  /* IMAGE THUMBS GRID */
+  .img-thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 6px; margin-top: 10px; }
+  .img-thumb-wrap { position: relative; }
+  .img-thumb-wrap img { width: 100%; height: 70px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); display: block; }
+  .img-thumb-wrap .remove-thumb { position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,0.7); border: none; color: var(--red); cursor: pointer; font-size: 12px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+
+  /* TEXTAREA */
+  .text-area { width: 100%; min-height: 120px; background: var(--surface2); border: 1.5px dashed rgba(0,229,204,0.3); border-radius: 8px; color: var(--text); font-family: var(--body); font-size: 14px; padding: 14px; resize: vertical; outline: none; transition: border-color 0.2s; }
+  .text-area:focus { border-color: var(--cyan); }
+  .text-area::placeholder { color: var(--text-dim); }
+
+  /* HEATMAP */
+  .heatmap-wrap { display: none; margin-top: 12px; }
+  .heatmap-wrap.show { display: block; }
+  .analysis-label { font-family: var(--mono); font-size: 10px; color: var(--cyan); letter-spacing: 0.1em; margin-bottom: 6px; }
+  .heatmap-imgs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .heatmap-imgs img { width: 100%; border-radius: 6px; border: 1px solid var(--border); }
+  .heatmap-caption { font-family: var(--mono); font-size: 9px; color: var(--text-dim); text-align: center; margin-top: 4px; }
+
+  /* ANALYSE BUTTON */
+  .analyse-wrap { position: relative; z-index: 1; max-width: 1100px; margin: 24px auto; padding: 0 20px; }
+  .analyse-btn { width: 100%; padding: 18px; background: transparent; border: 1.5px solid var(--cyan); border-radius: 8px; color: var(--cyan); font-family: var(--head); font-size: 16px; font-weight: 700; letter-spacing: 0.2em; cursor: pointer; position: relative; overflow: hidden; transition: background 0.3s, box-shadow 0.3s; }
+  .analyse-btn:hover { background: rgba(0,229,204,0.08); box-shadow: var(--cyan-glow); }
+  .analyse-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .scan-line { position: absolute; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--cyan), transparent); top: -2px; animation: scan 1.5s linear infinite; display: none; }
+  .analyse-btn.scanning .scan-line { display: block; }
+  @keyframes scan { from { top: -2px; } to { top: 100%; } }
+
+  /* RESULT */
+  .result { display: none; margin-top: 14px; padding: 14px; background: var(--surface2); border-radius: 8px; border: 1px solid var(--border); animation: fadeIn 0.4s ease; }
+  .result.show { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .result-verdict { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .verdict-badge { font-family: var(--head); font-size: 16px; font-weight: 900; letter-spacing: 0.15em; padding: 4px 14px; border-radius: 4px; animation: glitch 0.3s ease; }
+  @keyframes glitch { 0% { transform: skewX(-5deg); opacity: 0.5; } 25% { transform: skewX(3deg); } 50% { transform: skewX(-2deg); } 100% { transform: skewX(0); } }
+  .verdict-fake { color: var(--red); border: 1px solid var(--red); box-shadow: var(--red-glow); }
+  .verdict-real { color: var(--green); border: 1px solid var(--green); box-shadow: var(--green-glow); }
+  .verdict-unavail { color: var(--text-dim); border: 1px solid var(--border); }
+  .confidence-num { font-family: var(--mono); font-size: 22px; font-weight: 700; color: #fff; }
+  .conf-bar-wrap { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
+  .conf-bar { height: 100%; border-radius: 2px; width: 0%; transition: width 1s ease; }
+  .conf-bar.fake { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  .conf-bar.real { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .result-model { font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 0.05em; }
+  .result-filename { font-family: var(--mono); font-size: 10px; color: var(--cyan); margin-bottom: 6px; }
+
+  /* MULTI RESULTS */
+  .multi-results { display: flex; flex-direction: column; gap: 10px; }
+
+  /* TIMELINE */
+  .timeline-wrap { display: none; margin-top: 12px; }
+  .timeline-wrap.show { display: block; }
+  .timeline-bar { display: flex; height: 20px; border-radius: 4px; overflow: hidden; gap: 2px; }
+  .timeline-seg { flex: 1; border-radius: 2px; cursor: pointer; transition: opacity 0.2s; }
+  .timeline-seg:hover { opacity: 0.8; }
+  .timeline-seg.suspicious { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .timeline-seg.clean { background: var(--green); }
+  .timeline-timestamps { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 4px; }
+  .suspicious-list { margin-top: 8px; }
+  .susp-item { font-family: var(--mono); font-size: 10px; color: var(--red); padding: 3px 0; border-bottom: 1px solid rgba(255,59,59,0.1); }
+
+  /* AUDIO SEGMENTS */
+  .segments-wrap { display: none; margin-top: 12px; }
+  .segments-wrap.show { display: block; }
+  .seg-bar { display: flex; height: 16px; border-radius: 4px; overflow: hidden; gap: 2px; }
+  .seg-chunk { flex: 1; border-radius: 2px; }
+  .seg-chunk.fake { background: var(--red); }
+  .seg-chunk.real { background: var(--green); }
+  .seg-timestamps { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 4px; }
+  .seg-suspicious { margin-top: 8px; font-family: var(--mono); font-size: 10px; }
+
+  /* TEXT HIGHLIGHT */
+  .text-analysis { display: none; margin-top: 12px; }
+  .text-analysis.show { display: block; }
+  .sentence-highlight { font-size: 13px; line-height: 2.2; color: var(--text); }
+  .sent-fake { background: rgba(255,59,59,0.2); border-bottom: 2px solid var(--red); padding: 2px 4px; border-radius: 3px; }
+  .sent-real { background: rgba(0,230,118,0.05); padding: 2px 4px; border-radius: 3px; }
+  .text-summary { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-top: 8px; }
+
+  /* SPINNER */
+  .spinner { display: none; margin-top: 14px; text-align: center; padding: 14px; }
+  .spinner.show { display: block; }
+  .spin-ring { display: inline-block; width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--cyan); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin-text { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-top: 6px; letter-spacing: 0.1em; }
+
+  /* OVERALL VERDICT */
+  #overall { display: none; position: relative; z-index: 1; max-width: 1100px; margin: 0 auto 40px; padding: 0 20px; animation: fadeIn 0.6s ease; }
+  #overall.show { display: block; }
+  .overall-card { background: var(--surface); border-radius: 12px; padding: 32px; text-align: center; border: 1px solid var(--cyan-dim); box-shadow: var(--cyan-glow); }
+  .overall-label { font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 0.2em; margin-bottom: 12px; }
+  .overall-verdict-text { font-family: var(--head); font-size: clamp(48px, 8vw, 80px); font-weight: 900; letter-spacing: 0.1em; line-height: 1; margin-bottom: 8px; }
+  .overall-fake { color: var(--red); text-shadow: var(--red-glow), 0 0 60px #ff3b3b44; }
+  .overall-real { color: var(--green); text-shadow: var(--green-glow), 0 0 60px #00e67644; }
+  .overall-conf { font-family: var(--mono); font-size: 28px; color: #fff; margin-bottom: 8px; }
+  .threat-level { display: inline-block; font-family: var(--mono); font-size: 12px; padding: 4px 16px; border-radius: 20px; letter-spacing: 0.15em; margin-bottom: 20px; }
+  .threat-low { background: rgba(0,230,118,0.1); color: var(--green); border: 1px solid var(--green); }
+  .threat-medium { background: rgba(255,193,7,0.1); color: #ffc107; border: 1px solid #ffc107; }
+  .threat-high { background: rgba(255,87,34,0.1); color: #ff5722; border: 1px solid #ff5722; }
+  .threat-critical { background: rgba(255,59,59,0.1); color: var(--red); border: 1px solid var(--red); box-shadow: var(--red-glow); }
+  .overall-summary { font-size: 14px; color: var(--text-dim); font-family: var(--mono); margin-bottom: 20px; }
+  .modality-breakdown { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
+  .mod-chip { font-family: var(--mono); font-size: 11px; padding: 4px 12px; border-radius: 4px; letter-spacing: 0.05em; }
+  .mod-fake { background: rgba(255,59,59,0.1); color: var(--red); border: 1px solid rgba(255,59,59,0.3); }
+  .mod-real { background: rgba(0,230,118,0.1); color: var(--green); border: 1px solid rgba(0,230,118,0.3); }
+
+  /* FOOTER */
+  footer { position: relative; z-index: 1; text-align: center; padding: 24px 20px; border-top: 1px solid var(--border); font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 0.08em; }
+  footer span { color: var(--cyan); }
+
+  .clear-btn { background: none; border: none; color: var(--red); cursor: pointer; font-size: 14px; padding: 2px 8px; border-radius: 4px; font-family: var(--mono); transition: background 0.2s; }
+  .clear-btn:hover { background: rgba(255,59,59,0.1); }
+</style>
+</head>
+<body>
+
+<!-- INTRO -->
+<div id="intro">
+  <video id="intro-video" autoplay muted playsinline>
+    <source src="https://deepfake-datasets-yours.s3.amazonaws.com/intro.mp4" type="video/mp4">
+  </video>
+  <button id="skip-btn">Skip →</button>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <nav>
+    <div class="nav-logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/></svg>
+      </div>
+      <span class="logo-text">Truth<span>Lens</span></span>
+    </div>
+    <span class="nav-tag">Multimodal Deepfake Detection System</span>
+  </nav>
+
+  <div class="hero">
+    <h1>Find the <span>Truth.</span></h1>
+    <p>Detection across images, audios, videos and texts</p>
+  </div>
+
+  <div class="grid">
+
+    <!-- IMAGE -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          </div>
+          Image
+        </div>
+        <button class="clear-btn" onclick="clearAll('image')" id="img-clear-all" style="display:none">✕ Clear all</button>
+      </div>
+      <div class="drop-zone" id="img-drop" ondragover="dragOver(event,this)" ondragleave="dragLeave(this)" ondrop="handleDrop(event,'image')">
+        <input type="file" id="img-file" accept=".jpg,.jpeg,.png,.webp" multiple onchange="handleFiles(this,'image')">
+        <div class="drop-icon"><svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+        <div class="drop-text">Drag & drop or <span>browse files</span></div>
+        <div class="drop-formats">JPG · PNG · WEBP · multiple allowed</div>
+      </div>
+      <div class="img-thumbs" id="img-thumbs"></div>
+      <div class="file-list" id="img-file-list"></div>
+      <div class="spinner" id="img-spinner"><div class="spin-ring"></div><div class="spin-text">ANALYSING...</div></div>
+      <div class="multi-results" id="img-results"></div>
+      <div class="heatmap-wrap" id="img-heatmap-wrap">
+        <div class="analysis-label">// MANIPULATION HEATMAP (LAST IMAGE)</div>
+        <div class="heatmap-imgs">
+          <div><img id="img-original" alt="Original"><div class="heatmap-caption">ORIGINAL</div></div>
+          <div><img id="img-heatmap" alt="Heatmap"><div class="heatmap-caption">HEATMAP OVERLAY</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AUDIO -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </div>
+          Audio
+        </div>
+        <button class="clear-btn" onclick="clearAll('audio')" id="aud-clear-all" style="display:none">✕ Clear all</button>
+      </div>
+      <div class="drop-zone" id="aud-drop" ondragover="dragOver(event,this)" ondragleave="dragLeave(this)" ondrop="handleDrop(event,'audio')">
+        <input type="file" id="aud-file" accept=".wav,.mp3,.flac,.ogg,.m4a" multiple onchange="handleFiles(this,'audio')">
+        <div class="drop-icon"><svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+        <div class="drop-text">Drag & drop or <span>browse files</span></div>
+        <div class="drop-formats">WAV · MP3 · FLAC · multiple allowed</div>
+      </div>
+      <div class="file-list" id="aud-file-list"></div>
+      <div class="spinner" id="aud-spinner"><div class="spin-ring"></div><div class="spin-text">ANALYSING...</div></div>
+      <div class="multi-results" id="aud-results"></div>
+      <div class="segments-wrap" id="aud-segments-wrap">
+        <div class="analysis-label">// VOICE SEGMENT ANALYSIS (LAST FILE)</div>
+        <div class="seg-bar" id="aud-seg-bar"></div>
+        <div class="seg-timestamps" id="aud-seg-times"></div>
+        <div class="seg-suspicious" id="aud-seg-suspicious"></div>
+      </div>
+    </div>
+
+    <!-- VIDEO -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          </div>
+          Video
+        </div>
+        <button class="clear-btn" onclick="clearAll('video')" id="vid-clear-all" style="display:none">✕ Clear all</button>
+      </div>
+      <div class="drop-zone" id="vid-drop" ondragover="dragOver(event,this)" ondragleave="dragLeave(this)" ondrop="handleDrop(event,'video')">
+        <input type="file" id="vid-file" accept=".mp4,.avi,.mov,.mkv" multiple onchange="handleFiles(this,'video')">
+        <div class="drop-icon"><svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+        <div class="drop-text">Drag & drop or <span>browse files</span></div>
+        <div class="drop-formats">MP4 · AVI · MOV · multiple allowed</div>
+      </div>
+      <div class="file-list" id="vid-file-list"></div>
+      <div class="spinner" id="vid-spinner"><div class="spin-ring"></div><div class="spin-text">ANALYSING...</div></div>
+      <div class="multi-results" id="vid-results"></div>
+      <div class="timeline-wrap" id="vid-timeline-wrap">
+        <div class="analysis-label">// FRAME TIMESTAMP ANALYSIS (LAST FILE)</div>
+        <div class="timeline-bar" id="vid-timeline-bar"></div>
+        <div class="timeline-timestamps" id="vid-timeline-times"></div>
+        <div class="suspicious-list" id="vid-suspicious-list"></div>
+      </div>
+    </div>
+
+    <!-- TEXT -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </div>
+          Text
+        </div>
+        <button class="clear-btn" onclick="clearAll('text')" id="txt-clear" style="display:none">✕ Clear</button>
+      </div>
+      <textarea class="text-area" id="txt-input" placeholder="Paste your text here for analysis..." oninput="onTextInput()"></textarea>
+      <div class="spinner" id="txt-spinner"><div class="spin-ring"></div><div class="spin-text">ANALYSING...</div></div>
+      <div class="multi-results" id="txt-results"></div>
+      <div class="text-analysis" id="txt-analysis">
+        <div class="analysis-label">// SENTENCE-LEVEL ANALYSIS</div>
+        <div class="sentence-highlight" id="txt-sentences"></div>
+        <div class="text-summary" id="txt-summary"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="analyse-wrap">
+    <button class="analyse-btn" id="analyse-btn" onclick="analyseAll()">
+      <div class="scan-line"></div>
+      ⬡ &nbsp; ANALYSE
+    </button>
+  </div>
+
+  <div id="overall">
+    <div class="overall-card">
+      <div class="overall-label">// OVERALL VERDICT</div>
+      <div class="overall-verdict-text" id="overall-text"></div>
+      <div class="overall-conf" id="overall-conf"></div>
+      <div class="threat-level" id="threat-badge"></div>
+      <div class="overall-summary" id="overall-summary"></div>
+      <div class="modality-breakdown" id="mod-breakdown"></div>
+    </div>
+  </div>
+
+  <footer>
+    <span>TruthLens</span> © 2025 — Multimodal Deepfake Detection &nbsp;|&nbsp; For research purposes only
+  </footer>
+</div>
+
+<script>
+  const API_URL = 'https://vl9xt18ux0o4fn-8000.proxy.runpod.net';
+
+  // INTRO
+  const intro = document.getElementById('intro');
+  const video = document.getElementById('intro-video');
+  function dismissIntro() {
+    sessionStorage.setItem('introPlayed','1');
+    intro.classList.add('fade-out');
+    setTimeout(() => intro.style.display='none', 800);
+  }
+  if (sessionStorage.getItem('introPlayed')) { intro.style.display='none'; }
+  else {
+    video.addEventListener('ended', dismissIntro);
+    document.getElementById('skip-btn').addEventListener('click', dismissIntro);
+  }
+
+  // FILE STATE — arrays per modality
+  const fileStore = { image: [], audio: [], video: [] };
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + 'KB';
+    return (bytes/(1024*1024)).toFixed(1) + 'MB';
+  }
+
+  function dragOver(e, el) { e.preventDefault(); el.classList.add('dragover'); }
+  function dragLeave(el) { el.classList.remove('dragover'); }
+
+  function handleDrop(e, type) {
+    e.preventDefault();
+    const id = typeToId(type);
+    document.getElementById(id+'-drop').classList.remove('dragover');
+    const dropped = Array.from(e.dataTransfer.files);
+    addFiles(type, dropped);
+  }
+
+  function handleFiles(input, type) {
+    addFiles(type, Array.from(input.files));
+    input.value = '';
+  }
+
+  function typeToId(type) {
+    return type === 'image' ? 'img' : type === 'audio' ? 'aud' : 'vid';
+  }
+
+  function addFiles(type, newFiles) {
+    newFiles.forEach(f => {
+      if (!fileStore[type].find(x => x.name === f.name && x.size === f.size)) {
+        fileStore[type].push(f);
+      }
+    });
+    renderFileList(type);
+    clearResults(type);
+    document.getElementById('overall').classList.remove('show');
+  }
+
+  function removeFile(type, index) {
+    fileStore[type].splice(index, 1);
+    renderFileList(type);
+    clearResults(type);
+  }
+
+  function clearAll(type) {
+    if (type === 'text') {
+      document.getElementById('txt-input').value = '';
+      document.getElementById('txt-clear').style.display = 'none';
+      document.getElementById('txt-analysis').classList.remove('show');
+      clearResults('text');
+    } else {
+      fileStore[type] = [];
+      renderFileList(type);
+      clearResults(type);
+      if (type === 'image') {
+        document.getElementById('img-heatmap-wrap').classList.remove('show');
+      }
+      if (type === 'audio') document.getElementById('aud-segments-wrap').classList.remove('show');
+      if (type === 'video') document.getElementById('vid-timeline-wrap').classList.remove('show');
+    }
+    document.getElementById('overall').classList.remove('show');
+  }
+
+  function renderFileList(type) {
+    const id = typeToId(type);
+    const files = fileStore[type];
+    const listEl = document.getElementById(id+'-file-list');
+    const clearBtn = document.getElementById(id+'-clear-all');
+
+    listEl.innerHTML = '';
+    if (type === 'image') document.getElementById('img-thumbs').innerHTML = '';
+
+    if (files.length === 0) {
+      if (clearBtn) clearBtn.style.display = 'none';
+      return;
+    }
+    if (clearBtn) clearBtn.style.display = 'block';
+
+    files.forEach((f, i) => {
+      // Image thumbnails
+      if (type === 'image') {
+        const thumbsEl = document.getElementById('img-thumbs');
+        const wrap = document.createElement('div');
+        wrap.className = 'img-thumb-wrap';
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(f);
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'remove-thumb';
+        removeBtn.textContent = '✕';
+        removeBtn.onclick = () => removeFile(type, i);
+        wrap.appendChild(img);
+        wrap.appendChild(removeBtn);
+        thumbsEl.appendChild(wrap);
+      }
+
+      // File list item
+      const item = document.createElement('div');
+      item.className = 'file-item';
+      item.innerHTML = `
+        <div class="file-item-info">
+          <svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span class="file-item-name">${f.name}</span>
+          <span class="file-item-size">${formatSize(f.size)}</span>
+        </div>
+        <button class="file-remove" onclick="removeFile('${type}', ${i})">✕</button>
+      `;
+      listEl.appendChild(item);
+    });
+  }
+
+  function onTextInput() {
+    const val = document.getElementById('txt-input').value;
+    document.getElementById('txt-clear').style.display = val ? 'block' : 'none';
+    clearResults('text');
+    document.getElementById('overall').classList.remove('show');
+  }
+
+  function clearResults(type) {
+    const id = typeToId(type);
+    const resultsEl = document.getElementById(id === 'txt' ? 'txt' : id) + '-results';
+    const el = document.getElementById(
+      type === 'image' ? 'img-results' :
+      type === 'audio' ? 'aud-results' :
+      type === 'video' ? 'vid-results' : 'txt-results'
+    );
+    if (el) el.innerHTML = '';
+    const spinner = document.getElementById(
+      type === 'image' ? 'img-spinner' :
+      type === 'audio' ? 'aud-spinner' :
+      type === 'video' ? 'vid-spinner' : 'txt-spinner'
+    );
+    if (spinner) spinner.classList.remove('show');
+  }
+
+  // ANALYSE
+  async function analyseAll() {
+    const hasImage = fileStore.image.length > 0;
+    const hasAudio = fileStore.audio.length > 0;
+    const hasVideo = fileStore.video.length > 0;
+    const hasText  = !!document.getElementById('txt-input').value.trim();
+
+    if (!hasImage && !hasAudio && !hasVideo && !hasText) {
+      alert('Please upload at least one file or enter text.');
+      return;
+    }
+
+    const btn = document.getElementById('analyse-btn');
+    btn.disabled = true;
+    btn.classList.add('scanning');
+    document.getElementById('overall').classList.remove('show');
+
+    // Clear previous results
+    ['img-results','aud-results','vid-results','txt-results'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = '';
+    });
+
+    const allFakeScores = [];
+    const modalityVerdicts = {};
+    const promises = [];
+
+    if (hasImage) promises.push((async () => {
+      document.getElementById('img-spinner').classList.add('show');
+      const scores = [];
+      for (const file of fileStore.image) {
+        const data = await detectFile('image', file);
+        scores.push(data.fake_confidence || 0);
+        appendResult('img-results', file.name, data);
+        // Show heatmap for last image
+        if (file === fileStore.image[fileStore.image.length-1] && data.heatmap_b64) {
+          document.getElementById('img-original').src = URL.createObjectURL(file);
+          document.getElementById('img-heatmap').src = `data:image/png;base64,${data.heatmap_b64}`;
+          document.getElementById('img-heatmap-wrap').classList.add('show');
+        }
+        if (data.frame_scores) showVideoTimeline(data);
+        if (data.segment_analysis) showAudioSegments(data);
+      }
+      document.getElementById('img-spinner').classList.remove('show');
+      const avg = scores.reduce((a,b)=>a+b,0)/scores.length;
+      allFakeScores.push(avg);
+      modalityVerdicts.image = { verdict: avg>0.5?'FAKE':'REAL', fake_confidence: avg };
+    })());
+
+    if (hasAudio) promises.push((async () => {
+      document.getElementById('aud-spinner').classList.add('show');
+      const scores = [];
+      for (const file of fileStore.audio) {
+        const data = await detectFile('audio', file);
+        scores.push(data.fake_confidence || 0);
+        appendResult('aud-results', file.name, data);
+        if (file === fileStore.audio[fileStore.audio.length-1] && data.segment_analysis) {
+          showAudioSegments(data);
+        }
+      }
+      document.getElementById('aud-spinner').classList.remove('show');
+      const avg = scores.reduce((a,b)=>a+b,0)/scores.length;
+      allFakeScores.push(avg);
+      modalityVerdicts.audio = { verdict: avg>0.5?'FAKE':'REAL', fake_confidence: avg };
+    })());
+
+    if (hasVideo) promises.push((async () => {
+      document.getElementById('vid-spinner').classList.add('show');
+      const scores = [];
+      for (const file of fileStore.video) {
+        const data = await detectFile('video', file);
+        scores.push(data.fake_confidence || 0);
+        appendResult('vid-results', file.name, data);
+        if (file === fileStore.video[fileStore.video.length-1] && data.frame_scores) {
+          showVideoTimeline(data);
+        }
+      }
+      document.getElementById('vid-spinner').classList.remove('show');
+      const avg = scores.reduce((a,b)=>a+b,0)/scores.length;
+      allFakeScores.push(avg);
+      modalityVerdicts.video = { verdict: avg>0.5?'FAKE':'REAL', fake_confidence: avg };
+    })());
+
+    if (hasText) promises.push((async () => {
+      document.getElementById('txt-spinner').classList.add('show');
+      const text = document.getElementById('txt-input').value.trim();
+      const data = await detectText(text);
+      appendResult('txt-results', 'Text input', data);
+      if (data.sentence_analysis) showTextAnalysis(data);
+      document.getElementById('txt-spinner').classList.remove('show');
+      allFakeScores.push(data.fake_confidence || 0);
+      modalityVerdicts.text = { verdict: data.verdict, fake_confidence: data.fake_confidence || 0 };
+    })());
+
+    await Promise.all(promises);
+
+    btn.disabled = false;
+    btn.classList.remove('scanning');
+
+    if (allFakeScores.length > 0) showOverall(modalityVerdicts);
+  }
+
+  async function detectFile(type, file) {
+    // Try detailed endpoint first, fallback to basic
+    const detailedEndpoint = type === 'image' ? '/detect/image/heatmap' :
+                             type === 'audio' ? '/detect/audio/segments' :
+                             '/detect/video/timestamps';
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const res = await fetch(API_URL + detailedEndpoint, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error('detailed failed');
+      return await res.json();
+    } catch {
+      try {
+        const fd = new FormData(); fd.append('file', file);
+        const res = await fetch(`${API_URL}/detect/${type}`, { method: 'POST', body: fd });
+        return await res.json();
+      } catch {
+        return { verdict: 'ERROR', fake_confidence: 0, real_confidence: 0, model: 'Connection failed' };
+      }
+    }
+  }
+
+  async function detectText(text) {
+    try {
+      const fd = new FormData(); fd.append('text', text);
+      const res = await fetch(`${API_URL}/detect/text/sentences`, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error();
+      return await res.json();
+    } catch {
+      try {
+        const fd = new FormData(); fd.append('text', text);
+        const res = await fetch(`${API_URL}/detect/text`, { method: 'POST', body: fd });
+        return await res.json();
+      } catch {
+        return { verdict: 'ERROR', fake_confidence: 0, real_confidence: 0, model: 'Connection failed' };
+      }
+    }
+  }
+
+  function appendResult(containerId, filename, data) {
+    const container = document.getElementById(containerId);
+    const isFake = data.verdict === 'FAKE';
+    const isReal = data.verdict === 'REAL';
+    const conf = isFake ? (data.fake_confidence||0) : (data.real_confidence||0);
+    const pct  = Math.round(conf * 100);
+    const barId = 'bar-' + Math.random().toString(36).substr(2,6);
+    const badgeClass = isFake ? 'verdict-fake' : isReal ? 'verdict-real' : 'verdict-unavail';
+    const barClass   = isFake ? 'fake' : 'real';
+
+    const div = document.createElement('div');
+    div.className = 'result show';
+    div.innerHTML = `
+      <div class="result-filename">FILE: ${filename}</div>
+      <div class="result-verdict">
+        <span class="verdict-badge ${badgeClass}">${data.verdict}</span>
+        <span class="confidence-num">${pct}%</span>
+      </div>
+      <div class="conf-bar-wrap"><div class="conf-bar ${barClass}" id="${barId}"></div></div>
+      <div class="result-model">MODEL: ${data.model || 'Unknown'}</div>
+    `;
+    container.appendChild(div);
+    setTimeout(() => {
+      const bar = document.getElementById(barId);
+      if (bar) bar.style.width = pct + '%';
+    }, 50);
+  }
+
+  function showAudioSegments(data) {
+    const bar   = document.getElementById('aud-seg-bar');
+    const times = document.getElementById('aud-seg-times');
+    const susp  = document.getElementById('aud-seg-suspicious');
+    bar.innerHTML = ''; times.innerHTML = ''; susp.innerHTML = '';
+    data.segment_analysis.forEach(seg => {
+      const chunk = document.createElement('div');
+      chunk.className = 'seg-chunk ' + (seg.suspicious ? 'fake' : 'real');
+      chunk.title = `${seg.start}s-${seg.end}s: ${Math.round(seg.fake_confidence*100)}% fake`;
+      bar.appendChild(chunk);
+    });
+    times.innerHTML = `<span>0s</span><span>${data.duration_seconds}s</span>`;
+    if (data.suspicious_segments && data.suspicious_segments.length > 0) {
+      susp.innerHTML = `<span style="color:var(--red)">⚠ SUSPICIOUS: ${data.suspicious_segments.map(s=>`${s.start}s-${s.end}s`).join(', ')}</span>`;
+    } else {
+      susp.innerHTML = `<span style="color:var(--green)">✓ No suspicious segments detected</span>`;
+    }
+    document.getElementById('aud-segments-wrap').classList.add('show');
+  }
+
+  function showVideoTimeline(data) {
+    const bar   = document.getElementById('vid-timeline-bar');
+    const times = document.getElementById('vid-timeline-times');
+    const list  = document.getElementById('vid-suspicious-list');
+    bar.innerHTML = ''; times.innerHTML = ''; list.innerHTML = '';
+    data.frame_scores.forEach(frame => {
+      const seg = document.createElement('div');
+      seg.className = 'timeline-seg ' + (frame.suspicious ? 'suspicious' : 'clean');
+      seg.title = `${frame.timestamp}s: ${Math.round(frame.fake_confidence*100)}% fake`;
+      bar.appendChild(seg);
+    });
+    times.innerHTML = `<span>0s</span><span>${data.duration_seconds}s</span>`;
+    if (data.suspicious_timestamps && data.suspicious_timestamps.length > 0) {
+      data.suspicious_timestamps.forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'susp-item';
+        item.textContent = `⚠ ${f.timestamp}s — ${Math.round(f.fake_confidence*100)}% fake confidence`;
+        list.appendChild(item);
+      });
+    } else {
+      list.innerHTML = `<div style="color:var(--green);font-family:var(--mono);font-size:10px;">✓ No suspicious frames detected</div>`;
+    }
+    document.getElementById('vid-timeline-wrap').classList.add('show');
+  }
+
+  function showTextAnalysis(data) {
+    const container = document.getElementById('txt-sentences');
+    const summary   = document.getElementById('txt-summary');
+    container.innerHTML = '';
+    data.sentence_analysis.forEach(item => {
+      const span = document.createElement('span');
+      span.className = item.suspicious ? 'sent-fake' : 'sent-real';
+      span.textContent = item.sentence + ' ';
+      span.title = `${Math.round(item.fake_confidence*100)}% AI probability`;
+      container.appendChild(span);
+    });
+    summary.textContent = `${data.suspicious_count} of ${data.total_sentences} sentences flagged as AI-generated`;
+    document.getElementById('txt-analysis').classList.add('show');
+  }
+
+  function showOverall(modalityVerdicts) {
+    const values = Object.values(modalityVerdicts);
+    const fakeScores = values.map(v => v.fake_confidence || 0);
+    const avg   = fakeScores.reduce((a,b)=>a+b,0) / fakeScores.length;
+    const pct   = Math.round(avg * 100);
+    const isFake = avg > 0.5;
+    const fakeCount = values.filter(v => v.verdict === 'FAKE').length;
+    const total = values.length;
+
+    let threat, threatClass;
+    if (pct >= 90)      { threat='CRITICAL'; threatClass='threat-critical'; }
+    else if (pct >= 70) { threat='HIGH';     threatClass='threat-high'; }
+    else if (pct >= 50) { threat='MEDIUM';   threatClass='threat-medium'; }
+    else                { threat='LOW';      threatClass='threat-low'; }
+
+    document.getElementById('overall-text').textContent = isFake ? 'FAKE' : 'REAL';
+    document.getElementById('overall-text').className = 'overall-verdict-text ' + (isFake ? 'overall-fake' : 'overall-real');
+    document.getElementById('overall-conf').textContent = pct + '% confidence';
+    document.getElementById('threat-badge').textContent = '▲ THREAT LEVEL: ' + threat;
+    document.getElementById('threat-badge').className = 'threat-level ' + threatClass;
+    document.getElementById('overall-summary').textContent = `${fakeCount} of ${total} modalities detected manipulation`;
+
+    const breakdown = document.getElementById('mod-breakdown');
+    breakdown.innerHTML = '';
+    const labels = { image:'IMAGE', audio:'AUDIO', video:'VIDEO', text:'TEXT' };
+    for (const [type, data] of Object.entries(modalityVerdicts)) {
+      const chip = document.createElement('div');
+      chip.className = 'mod-chip ' + (data.verdict==='FAKE' ? 'mod-fake' : 'mod-real');
+      chip.textContent = `${labels[type]}: ${data.verdict} (${Math.round((data.fake_confidence||0)*100)}%)`;
+      breakdown.appendChild(chip);
+    }
+    document.getElementById('overall').classList.add('show');
+  }
+</script>
+</body>
+</html>
