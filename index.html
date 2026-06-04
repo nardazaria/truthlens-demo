@@ -130,6 +130,7 @@
   .conf-bar.fake { background: var(--red); box-shadow: 0 0 8px var(--red); }
   .conf-bar.real { background: var(--green); box-shadow: 0 0 8px var(--green); }
   .result-model { font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 0.05em; }
+  .result-explanation { font-size: 12px; color: var(--text-dim); margin-top: 8px; line-height: 1.6; border-left: 2px solid var(--cyan-dim); padding-left: 10px; font-family: var(--body); }
   .result-filename { font-family: var(--mono); font-size: 10px; color: var(--cyan); margin-bottom: 6px; }
 
   /* MULTI RESULTS */
@@ -674,6 +675,7 @@
       </div>
       <div class="conf-bar-wrap"><div class="conf-bar ${barClass}" id="${barId}"></div></div>
       <div class="result-model">MODEL: ${data.model || 'Unknown'}</div>
+      ${data.explanation ? `<div class="result-explanation">${data.explanation}</div>` : ''}
     `;
     container.appendChild(div);
     setTimeout(() => {
