@@ -618,7 +618,6 @@
   }
 
   async function detectFile(type, file) {
-    // Try detailed endpoint first, fallback to basic
     const detailedEndpoint = type === 'image' ? '/detect/image/heatmap' :
                              type === 'audio' ? '/detect/audio/segments' :
                              '/detect/video/timestamps';
