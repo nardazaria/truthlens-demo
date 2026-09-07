@@ -11,8 +11,8 @@ TruthLens is a system designed to analyse **images, audio, video, and text** and
 
 TruthLens uses modality-specific models to analyse different types of digital media. The system then combines the resulting predictions through a late-fusion approach to produce an overall assessment.
 
-# Following are the modality-level accuracies:
-Image	= 99.7%
-Audio	= 95.0%
-Video	= 90.4%
-Text	= 94.2%
+## Modality-level accuracies:
+- Image	= 99.7%
+- Audio	= 95.0%
+- Video	= 90.4%
+- Text	= 94.2%
